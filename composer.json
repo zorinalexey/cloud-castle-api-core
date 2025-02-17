@@ -1,0 +1,34 @@
+{
+  "name": "cloud-castle/api-core",
+  "description": "Быстрый php фреймворк для легкого развертывания REST API сервисов",
+  "type": "library",
+  "license": "MIT",
+  "autoload": {
+    "psr-4": {
+      "CloudCastle\\Core\\Api\\": "src/"
+    },
+    "files": [
+      "src/functions/autoload_functions.php"
+    ]
+  },
+  "authors": [
+    {
+      "name": "Алексей Зорин",
+      "email": "zorinalexey59292@gmail.com"
+    }
+  ],
+  "minimum-stability": "stable",
+  "require": {
+    "php": ">=8.3",
+    "predis/predis": "*",
+    "guzzle/http": "*",
+    "symfony/var-dumper": "*",
+    "ramsey/uuid": "*",
+    "ext-mbstring": "*",
+    "ext-pdo": "*",
+    "ext-zip": "*",
+    "ext-fileinfo": "*",
+    "ext-simplexml": "*",
+    "ext-calendar": "*"
+  }
+}
