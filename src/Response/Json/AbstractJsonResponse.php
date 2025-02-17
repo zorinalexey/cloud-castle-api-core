@@ -2,10 +2,11 @@
 
 namespace CloudCastle\Core\Api\Response\Json;
 
+use CloudCastle\Core\Api\Response\AbstractResponse;
 use CloudCastle\Core\Api\Response\ResponseInterface;
 use JsonException;
 
-abstract class AbstractJsonResponse implements ResponseInterface
+abstract class AbstractJsonResponse extends AbstractResponse implements ResponseInterface
 {
     /**
      * @throws JsonException

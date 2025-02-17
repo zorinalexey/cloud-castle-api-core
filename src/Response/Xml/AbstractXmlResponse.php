@@ -2,10 +2,11 @@
 
 namespace CloudCastle\Core\Api\Response\Xml;
 
+use CloudCastle\Core\Api\Response\AbstractResponse;
 use CloudCastle\Core\Api\Response\ResponseInterface;
 use XMLWriter;
 
-abstract class AbstractXmlResponse implements ResponseInterface
+abstract class AbstractXmlResponse extends AbstractResponse implements ResponseInterface
 {
     private static XMLWriter|null $obj = null;
     
