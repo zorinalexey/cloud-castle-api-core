@@ -29,6 +29,7 @@
     "ext-zip": "*",
     "ext-fileinfo": "*",
     "ext-simplexml": "*",
-    "ext-calendar": "*"
+    "ext-calendar": "*",
+    "ext-xmlwriter": "*"
   }
 }
