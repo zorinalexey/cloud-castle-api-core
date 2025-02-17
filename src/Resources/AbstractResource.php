@@ -11,18 +11,11 @@ use stdClass;
 abstract class AbstractResource extends stdClass
 {
     /**
-     * @var array|object|null
-     */
-    private array|null|object $data = null;
-    
-    /**
      * @param array|object|null $data
      */
-    final protected function __construct (array|object|null $data = null)
+    protected function __construct (array|object|null $data = null)
     {
-        $this->data = $data;
-        
-        foreach ($this->data ?? [] as $key => $value) {
+        foreach ($data ?? [] as $key => $value) {
             $this->{$key} = $value;
         }
     }
@@ -39,8 +32,9 @@ abstract class AbstractResource extends stdClass
             return $collection;
         }
         
-        foreach ($data as $object) {
-            $collection[] = self::make($object);
+        foreach ($data as $item) {
+            $key = md5(json_encode($item));
+            $collection[$key] = self::make($item);
         }
         
         return array_values($collection);
@@ -48,16 +42,11 @@ abstract class AbstractResource extends stdClass
     
     /**
      * @param array|object|null $data
-     * @return array
+     * @return stdClass
      */
-    final public static function make (array|object|null $data = null): array
+    final public static function make (array|object|null $data = null): stdClass
     {
         $object = new static($data);
-        
-        foreach ($data ?? [] as $key => $value) {
-            $object->{$key} = $value;
-        }
-        
         $result = [];
         
         foreach ($object->toArray() as $name => $value) {
@@ -66,7 +55,7 @@ abstract class AbstractResource extends stdClass
         
         unset($object);
         
-        return $result;
+        return (object)$result;
     }
     
     /**
@@ -85,9 +74,9 @@ abstract class AbstractResource extends stdClass
         }
         
         if (is_object($this->data)) {
-            return $this->data->{$name} ?? null;
+            return $this->{$name} ?? null;
         }
         
-        return $this->data[$name] ?? null;
+        return null;
     }
 }

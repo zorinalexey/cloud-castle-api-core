@@ -64,8 +64,3 @@ function scan_dir (string $dir, bool $recursive = true, array $ignoreList = [__F
 foreach (scan_dir(dir : __DIR__, ext : ['.php']) as $file) {
     require_once $file;
 }
-
-$config = Config::init(CORE_PATH . DIRECTORY_SEPARATOR . 'config');
-Lang::init(CORE_PATH . DIRECTORY_SEPARATOR . 'resources' . DIRECTORY_SEPARATOR . 'lang' . DIRECTORY_SEPARATOR . $config->app->lang);
-Log::config((array) $config->logger);
-
