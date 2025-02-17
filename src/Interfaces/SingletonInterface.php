@@ -5,7 +5,7 @@ namespace CloudCastle\Core\Api\Interfaces;
 interface SingletonInterface
 {
     /**
-     * @return self
+     * @return mixed
      */
-    public static function getInstance (): self;
+    public static function getInstance (): mixed;
 }
