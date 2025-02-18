@@ -15,7 +15,7 @@ abstract class AbstractResource extends stdClass
      */
     protected function __construct (array|object|null $data = null)
     {
-        foreach ($data ?? [] as $key => $value) {
+        foreach ($data ?? (object)[] as $key => $value) {
             $this->{$key} = $value;
         }
     }
@@ -69,14 +69,6 @@ abstract class AbstractResource extends stdClass
      */
     public function __get (string $name): mixed
     {
-        if ($this->data === null) {
-            return null;
-        }
-        
-        if (is_object($this->data)) {
-            return $this->{$name} ?? null;
-        }
-        
-        return null;
+        return $this->{$name} ?? null;
     }
 }

@@ -14,7 +14,7 @@ final class TokenFilter extends AbstractBuilder
         'expires_at',
     ];
     
-    protected function setAddFilters (array &$filters): void
+    protected function setAddFilterParams (array &$filters): void
     {
     }
 }

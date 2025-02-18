@@ -4,6 +4,7 @@ namespace CloudCastle\Core\Api\Router;
 
 use CloudCastle\Core\Api\Interfaces\SingletonInterface;
 use CloudCastle\Core\Api\Request\Request;
+use CloudCastle\Core\Api\Response\ResponseInterface;
 use CloudCastle\Core\Api\Router\Routes\AbstractRoute;
 
 final class Router implements SingletonInterface
@@ -22,6 +23,8 @@ final class Router implements SingletonInterface
      * @var Request
      */
     private Request $request;
+    
+    private static AbstractRoute|null $currentRoute = null;
     
     /**
      *
@@ -67,7 +70,7 @@ final class Router implements SingletonInterface
      * @return mixed
      * @throws RouteException
      */
-    public static function run (): mixed
+    public static function run (): ResponseInterface
     {
         $router = self::getInstance();
         $request_uri = $router->request->request_uri;
@@ -79,12 +82,19 @@ final class Router implements SingletonInterface
         
         foreach ($router->routeList as $route) {
             /** @var AbstractRoute $route */
-            if (preg_match($route->pattern, $request_uri) && in_array(request_method(), $route->getMethods())) {
-                return $route->run();
+            if (preg_match($route->pattern, $request_uri, $matches) && in_array(request_method(), $route->getMethods())) {
+                self::$currentRoute = $route;
+                
+                 return $route->run();
             }
         }
         
         throw new RouteException(trans('router.404 - Page not found!!!'), 404);
+    }
+    
+    public static function getCurrentRoute (): AbstractRoute
+    {
+        return self::$currentRoute;
     }
     
     /**

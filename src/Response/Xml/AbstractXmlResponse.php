@@ -47,7 +47,7 @@ abstract class AbstractXmlResponse extends AbstractResponse implements ResponseI
             self::$obj->endComment();
         }
         
-        self::$obj->startElement($name);
+        self::$obj->startElement((string)$name);
         
         if ($attributes) {
             foreach ($attributes AS $key => $value) {
@@ -93,12 +93,19 @@ abstract class AbstractXmlResponse extends AbstractResponse implements ResponseI
         if ($content !== null) {
             if(is_array($content) || is_object($content)) {
                 foreach ($content AS $key => $value) {
+                    if(is_int($key)) {
+                        $key = $name;
+                    }
+                    
                     $this->addElement($key, $value);
                 }
             }else{
+                if(is_bool($content)) {
+                    $content = $content ? 'true' : 'false';
+                }
+                
                 self::$obj->text((string)$content);
             }
-            
         }
         
         $this->closeElement();

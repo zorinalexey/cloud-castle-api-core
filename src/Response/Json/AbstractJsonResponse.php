@@ -13,6 +13,10 @@ abstract class AbstractJsonResponse extends AbstractResponse implements Response
      */
     public function __toString (): string
     {
+        if(!$this->errors){
+            $this->errors = (object)[];
+        }
+        
         return json_encode($this, JSON_THROW_ON_ERROR);
     }
 }

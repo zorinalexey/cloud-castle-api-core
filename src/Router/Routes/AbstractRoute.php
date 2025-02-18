@@ -8,8 +8,9 @@ use CloudCastle\Core\Api\Request\FormRequest;
 use CloudCastle\Core\Api\Request\Request;
 use CloudCastle\Core\Api\Router\RouteException;
 use ReflectionException;
+use stdClass;
 
-abstract class AbstractRoute
+abstract class AbstractRoute extends stdClass
 {
     /**
      * @var string
@@ -90,12 +91,21 @@ abstract class AbstractRoute
     private function setPattern (): void
     {
         $pattern = '([\w.-]+)';
-        $this->pattern = '~^' . str_replace('.', '\\.', $this->path) . '$~ui';
+        $this->pattern = '~^(' . str_replace('.', '\\.', $this->path) . ')$~ui';
+        $request = Request::getInstance();
         
         if ($this->path && preg_match_all('~{' . $pattern . '}~ui', $this->path, $matches)) {
             foreach ($matches[1] as $key => $match) {
-                $this->pattern = str_replace($matches[0][$key], "(?<{$key}>[\w.-]+)", $this->pattern);
-                $this->{$key} = $match;
+                $this->pattern = str_replace($matches[0][$key], "(?<{$match}>[\w.-]+)", $this->pattern);
+                
+                if(preg_match($this->pattern, $request->request_uri, $reqMatchesh)) {
+                    foreach ($reqMatchesh as $key => $reqMatch) {
+                        if(is_string($key)) {
+                            $this->{$match} = $reqMatch;
+                            $request->{$key} = $reqMatch;
+                        }
+                    }
+                }
             }
         }
     }
@@ -216,7 +226,9 @@ abstract class AbstractRoute
         $this->runChecks();
         
         if (!$this->middlewareErrors) {
-            return (new ($this->controller))->{($this->action)}(...$this->getArgs());
+            $args = $this->getArgs();
+            
+            return (new ($this->controller))->{($this->action)}(...$args);
         }
         
         throw new RouteException(implode(PHP_EOL, $this->middlewareErrors), $this->httpCode);
@@ -269,13 +281,13 @@ abstract class AbstractRoute
     {
         $args = [];
         
-        foreach ($this->args as $arg) {
+        foreach ($this->args as $key => $arg) {
             if (property_exists($this, $arg) && !is_null($arg)) {
-                $args[$arg] = $this->{$arg};
+                $args[$key] = $this->{$arg};
             }
             
-            if ($arg && class_exists($arg) && in_array(FormRequest::class, getClassImplements($arg))) {
-                $args[$arg] = new $arg();
+            if (class_exists($arg) && in_array(FormRequest::class, getClassImplements($arg))) {
+                $args[$key] = new $arg();
             }
         }
         

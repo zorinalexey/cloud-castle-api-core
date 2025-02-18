@@ -2,10 +2,11 @@
 
 namespace CloudCastle\Core\Api\Response;
 
+use stdClass;
 
-abstract class AbstractResponse implements ResponseInterface
+abstract class AbstractResponse extends stdClass implements ResponseInterface
 {
-    
+    public mixed $data = [];
     public bool $success = true;
     
     public bool $error = false;
@@ -14,20 +15,17 @@ abstract class AbstractResponse implements ResponseInterface
     
     public string|null $message = null;
     
-    public array $errors = [];
-    
-    public array $data = [];
+    public object|null $errors = null;
     
     abstract public function __toString(): string;
     
-    public function __construct(array $data, array $errors = [], string|null $message = null, int $code = 200, array $options = [])
+    public function __construct(array|object $data, array $errors = [], string|null $message = null, int $code = 200)
     {
-        $this->data = $data;
-        $this->errors = $errors;
-        $this->message = $message;
-        $this->code = $code;
+        $this->errors = (object)$errors;
+        $this->message = $message?(string)$message:trans('response.Ok');
+        $this->code = (int)$code;
         
-        foreach ($options as $key => $value) {
+        foreach ($data as $key => $value) {
             $this->{$key} = $value;
         }
     }

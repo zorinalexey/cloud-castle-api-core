@@ -35,7 +35,7 @@ abstract class AbstractService extends stdClass
     /**
      * @var PdoConnect
      */
-    protected readonly PdoConnect $db;
+    protected PdoConnect|null $db = null;
     
     /**
      * @var array
@@ -57,8 +57,6 @@ abstract class AbstractService extends stdClass
         foreach ($this->di() as $key => $value) {
             $this->{$key} = $value;
         }
-        
-        $this->db = new PdoConnect($this->config->database[$this->dbName]);
     }
     
     abstract protected function di (): array;
@@ -66,7 +64,7 @@ abstract class AbstractService extends stdClass
     /**
      * @return array
      */
-    public function getError (): array
+    public function getErrors (): array
     {
         return $this->error;
     }
@@ -95,7 +93,9 @@ abstract class AbstractService extends stdClass
         }catch(Exception $e){
             $pdo->rollBack();
             Log::write($e, $this->getTable().'.log');
-            $this->error = $e->getTrace();
+            $code = $e->getCode();
+            $this->error[$code]['trace'] = $e->getTrace();
+            $this->error[$code]['message'] = $e->getMessage();
         }
         
         return null;
@@ -131,7 +131,7 @@ abstract class AbstractService extends stdClass
      * @return object|null
      * @throws ServiceException
      */
-    public function view (string $uuid, string $trashed = 'not_trashed'): object|null
+    public function view (string $uuid, string|null $trashed = null): object|null
     {
         $pdo = $this->db->getPdo();
         
@@ -143,11 +143,16 @@ abstract class AbstractService extends stdClass
             }
             
             $filters = [
-                'uuid' => $uuid,
-                'trashed' => $trashed,
+                'id' => $uuid,
+                'int_id' => $uuid,
             ];
+            
+            if($trashed) {
+                $filters['trashed'] = $trashed;
+            }
+            
             $pdo->beginTransaction();
-            $dbType = $this->config->database[$this->dbName]['db_type'];
+            $dbType = $this->config->database->{$this->dbName}['db_type'];
             $builder = $this->filter::select($filters, $this->getTable(), $this->getTableAlias(), $dbType);
             
             if ($entity = $this->db->first($builder->sql, $builder->binds)) {
@@ -161,7 +166,9 @@ abstract class AbstractService extends stdClass
         } catch (Exception $e) {
             $pdo->rollBack();
             Log::write($e, $this->getTable().'.log');
-            $this->error = $e->getTrace();
+            $code = $e->getCode();
+            $this->error[$code]['trace'] = $e->getTrace();
+            $this->error[$code]['message'] = $e->getMessage();
         }
         
         return null;
@@ -186,9 +193,9 @@ abstract class AbstractService extends stdClass
         }
     }
     
-    private function getCacheConfig (): array|null
+    private function getCacheConfig (): stdClass|null
     {
-        if (($config = $this->config['cache']) && $config['status']) {
+        if (($config = $this->config->cache) && $config->status) {
             return $config;
         }
         
@@ -205,8 +212,9 @@ abstract class AbstractService extends stdClass
     private function writeHistory (array $before, array $after, string $action): void
     {
         $table = $this->getTable();
+        $historyConfig = $this->config->history;
         
-        if (($historyConfig = $this->config->history[$table] ?? null) && ($historyConfig[$action] ?? null)) {
+        if ($historyConfig->status && isset($historyConfig->actions->{$action}->{$table}) && $historyConfig->actions->{$action}->{$table}) {
             $sql = /** @lang text */
                 "INSERT INTO\n\thistories\n\t(uuid, table, service, action, before, after)\n";
             $sql .= "VALUES\n\t(:uuid, :table, :service, :action, :before, :after)\n";
@@ -241,17 +249,20 @@ abstract class AbstractService extends stdClass
             }
             
             $pdo->beginTransaction();
-            $dbType = $this->config->database[$this->dbName]['db_type'];
+            $dbType = ($this->config->database->{$this->dbName})['db_type'];
             $builder = $this->filter::select($data, $this->getTable(), $this->getTableAlias(), $dbType);
-            $list = $this->db->get($builder->sql, $builder->binds);
+            [$collection, $paginate] = $this->db->paginate($builder->sql, $builder->binds, $data);
+            $list = ['collection' => $collection, 'paginate' => $paginate];
             $this->setCache($key);
-            $before = $after = $list;
+            $before = $after = $collection;
             $this->writeHistory($before, $after, 'list');
             $pdo->commit();
         }catch(Exception $e){
             $pdo->rollBack();
             Log::write($e, $this->getTable().'.log');
-            $this->error = $e->getTrace();
+            $code = $e->getCode();
+            $this->error[$code]['trace'] = $e->getTrace();
+            $this->error[$code]['message'] = $e->getMessage();
         }
         
         return $list;
@@ -299,7 +310,9 @@ abstract class AbstractService extends stdClass
         }catch(Exception $e){
             $pdo->rollBack();
             Log::write($e, $this->getTable().'.log');
-            $this->error = $e->getTrace();
+            $code = $e->getCode();
+            $this->error[$code]['trace'] = $e->getTrace();
+            $this->error[$code]['message'] = $e->getMessage();
         }
         
         return null;
@@ -314,7 +327,7 @@ abstract class AbstractService extends stdClass
     private function getCrudOptions (string $uuid, string $action): array
     {
         $data = ['uuid' => $uuid, 'trashed' => 'all'];
-        $dbType = $this->config->database[$this->dbName]['db_type'];
+        $dbType = $this->config->database->{$this->dbName}['db_type'];
         $builder = $this->filter::select($data, $this->getTable(), $this->getTableAlias(), $dbType);
         $before = $this->db->first($builder->sql, $builder->binds);
         unset($builder);
@@ -357,7 +370,9 @@ abstract class AbstractService extends stdClass
         }catch(Exception $e){
             $pdo->rollBack();
             Log::write($e, $this->getTable().'.log');
-            $this->error = $e->getTrace();
+            $code = $e->getCode();
+            $this->error[$code]['trace'] = $e->getTrace();
+            $this->error[$code]['message'] = $e->getMessage();
         }
         
         return false;
@@ -396,7 +411,9 @@ abstract class AbstractService extends stdClass
         }catch(Exception $e){
             $pdo->rollBack();
             Log::write($e, $this->getTable().'.log');
-            $this->error = $e->getTrace();
+            $code = $e->getCode();
+            $this->error[$code]['trace'] = $e->getTrace();
+            $this->error[$code]['message'] = $e->getMessage();
         }
         
         return false;
@@ -430,7 +447,9 @@ abstract class AbstractService extends stdClass
         }catch(Exception $e){
             $pdo->rollBack();
             Log::write($e, $this->getTable().'.log');
-            $this->error = $e->getTrace();
+            $code = $e->getCode();
+            $this->error[$code]['trace'] = $e->getTrace();
+            $this->error[$code]['message'] = $e->getMessage();
         }
         
         return null;

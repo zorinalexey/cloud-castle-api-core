@@ -14,7 +14,7 @@ abstract class AbstractBuilder extends stdClass
      */
     protected const array COMMON_FIELDS = [
         'id',
-        'uuid',
+        'int_id',
         'deleted_at',
         'created_at',
         'updated_at',
@@ -96,7 +96,7 @@ abstract class AbstractBuilder extends stdClass
      * @param array $filters
      * @return void
      */
-    abstract protected function setAddFilters (array &$filters): void;
+    abstract protected function setAddFilterParams (array &$filters): void;
     
     private function checkSorts (array &$filters): void
     {
@@ -130,7 +130,7 @@ abstract class AbstractBuilder extends stdClass
      */
     public static function select (array $filters, string $table, string|null $alias = null, string|null $dbType = null): object
     {
-        $instance = new static($filters, $table, $alias);
+        $instance = new static($filters, $table, $alias, $dbType);
         
         return self::getResult($instance, $instance->getSqlSelectString());
     }
@@ -222,7 +222,7 @@ abstract class AbstractBuilder extends stdClass
     /**
      * @return string
      */
-    final protected function getAlias (): string
+    final protected function getAlias (): string|null
     {
         return $this->alias;
     }

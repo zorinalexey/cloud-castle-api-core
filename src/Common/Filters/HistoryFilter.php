@@ -14,7 +14,7 @@ final class HistoryFilter extends AbstractBuilder
         'after',
     ];
     
-    protected function setAddFilters (array &$filters): void
+    protected function setAddFilterParams (array &$filters): void
     {
     }
 }

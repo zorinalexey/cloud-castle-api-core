@@ -42,13 +42,20 @@ abstract class FormRequest extends stdClass
         foreach (Request::getInstance() as $key => $value) {
             $this->{$key} = $value;
         }
+        
+        if(!isset($this->page)) {
+            $this->page = 1;
+        }
+        if(!isset($this->per_page)) {
+            $this->per_page = 50;
+        }
     }
     
     /**
      * @return array
      * @throws ValidateException
      */
-    final public function validate (): array
+    final public function validated (): array
     {
         foreach ($this->getAllRules() as $key => $rules) {
             if (property_exists($this, $key)) {
@@ -590,10 +597,9 @@ abstract class FormRequest extends stdClass
         if (!$config) {
             $this->setErrorMessage($key, "Configuration for database connection ':db_name' not found", [':param' => $key, ':db_name' => $dbName]);
         } elseif ($db = new PdoConnect($config)) {
-            $sql = /** @lang text */
-                "SELECT COUNT(*) AS entity FROM ".$table." WHERE ".$field." = ?";
+            $sql = /** @lang text */ "SELECT * FROM ".$table." WHERE ".$field." = :".$field;
             
-            if (!$db->first($sql, [$field])) {
+            if (!$db->first($sql, [':'.$field => $this->{$key}])) {
                 $this->setErrorMessage($key, "Entry in table :table with parameters :param not found",
                     [
                         ':param' => $field." = '".$this->{$key}."'",
@@ -622,7 +628,7 @@ abstract class FormRequest extends stdClass
             $this->setErrorMessage($key, "The database connection name is specified incorrectly", [':param' => $key]);
         }
         
-        return config("database")[$dbName] ?? null;
+        return config("database")->{$dbName} ?? null;
     }
     
     /**
@@ -639,10 +645,9 @@ abstract class FormRequest extends stdClass
         if (!$config) {
             $this->setErrorMessage($key, "Configuration for database connection ':db_name' not found", [':param' => $key, ':db_name' => $dbName]);
         } elseif ($db = new PdoConnect($config)) {
-            $sql = /** @lang text */
-                "SELECT COUNT(*) AS entity FROM ".$table." WHERE ".$field." = ?";
+            $sql = /** @lang text */ "SELECT * FROM ".$table." WHERE ".$field." = :".$field;
             
-            if ($db->first($sql, [$field])) {
+            if ($db->first($sql, [':'.$field => $this->{$key}])) {
                 $this->setErrorMessage($key, "Entry in table :table with parameters :param already exists",
                     [
                         ':param' => $field." = '".$this->{$key}."'",
