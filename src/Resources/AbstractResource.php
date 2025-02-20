@@ -10,13 +10,21 @@ use stdClass;
  */
 abstract class AbstractResource extends stdClass
 {
+    protected readonly string $prefixUrl;
     /**
      * @param array|object|null $data
      */
     protected function __construct (array|object|null $data = null)
     {
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+        $domain = $_SERVER['HTTP_HOST'];
+        
+        $this->prefixUrl = $protocol . $domain;
+        
         foreach ($data ?? (object)[] as $key => $value) {
-            $this->{$key} = $value;
+            if(!property_exists($this, $key)) {
+                $this->{$key} = $value;
+            }
         }
     }
     

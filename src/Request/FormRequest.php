@@ -14,8 +14,8 @@ abstract class FormRequest extends stdClass
      */
     protected array $common_rules = [
         'trashed' => 'default:not_trashed|string|nullable|enum:trashed,not_trashed,all',
-        'id' => 'int|nullable',
-        'uuid' => 'string|nullable',
+        'id' => 'string|nullable',
+        'int_id' => 'int|nullable',
         'created_at' => 'date|nullable',
         'updated_at' => 'date|nullable',
         'deleted_at' => 'date|nullable',

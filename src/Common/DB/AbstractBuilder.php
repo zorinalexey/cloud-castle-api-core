@@ -40,6 +40,8 @@ abstract class AbstractBuilder extends stdClass
      */
     protected array $selectFields = [];
     
+    protected array $distinctFields = [];
+    
     /**
      * @var array
      */
@@ -82,7 +84,7 @@ abstract class AbstractBuilder extends stdClass
         $this->table = $table;
         $this->alias = $alias;
         $this->dbType = $dbType;
-        $this->setAddFilters($filters);
+        $this->setAddFilterParams($filters);
         $this->checkSorts($filters);
         
         foreach ($filters as $method => $value) {
@@ -162,7 +164,13 @@ abstract class AbstractBuilder extends stdClass
     final protected function getSqlSelectString (): string
     {
         $this->setOtherSelectSqlOptions();
-        $sql = "SELECT\n\t" . implode(",\n\t", $this->getSelectFields()) . "\n";
+        $sql = "SELECT\n\t";
+        
+        if($this->distinctFields) {
+            $sql .= "DISTINCT (".implode(", ", $this->distinctFields)."),\n\t";
+        }
+        
+        $sql .= implode(",\n\t", $this->getSelectFields()) . "\n";
         $sql .= "FROM\n\t{$this->getTableAsAlias()}\n";
         
         if ($this->joins) {
@@ -174,15 +182,15 @@ abstract class AbstractBuilder extends stdClass
         }
         
         if ($this->groupBy) {
-            $sql .= implode("\n\t", $this->groupBy) . "\n";
+            $sql .= "GROUP BY\n\t".implode("\n\t", $this->groupBy) . "\n";
         }
         
         if ($this->having) {
-            $sql .= implode("\n\t", $this->having) . "\n";
+            $sql .= "HAVING\n\t".implode("\n\t", $this->having) . "\n";
         }
         
         if ($this->orderBy) {
-            $sql .= implode("\n\t", $this->orderBy) . "\n";
+            $sql .= "ORDER BY\n\t".implode("\n\t", $this->orderBy) . "\n";
         }
         
         return $sql;
@@ -210,7 +218,7 @@ abstract class AbstractBuilder extends stdClass
             }
         } else {
             foreach ($fields as $field) {
-                $data[] = "{$this->getTable()}.$field";
+                $data[] = $field;
             }
         }
         
@@ -238,7 +246,7 @@ abstract class AbstractBuilder extends stdClass
         }
         
         if (!$this->alias) {
-            return "{$this->getTable()}.{$field}";
+            return $field;
         }
         
         return "{$this->getAlias()}.{$field}";
@@ -270,10 +278,10 @@ abstract class AbstractBuilder extends stdClass
     final protected function cleanConditions (): string
     {
         $clearing = [
-            'AND ',
-            'OR ',
-            'and ',
-            'or ',
+            'AND',
+            'OR',
+            'and',
+            'or',
         ];
         $conditions = implode("\n\t", $this->conditions);
         
@@ -289,13 +297,12 @@ abstract class AbstractBuilder extends stdClass
      * @param string $table
      * @return object
      */
-    public static function soft_delete (string|int $id, string $table): object
+    public static function soft_delete (string|int $id, string $table, string $dbType): object
     {
-        $instance = new static(['id' => $id], $table);
+        $instance = new static(['id' => $id], $table, dbType: $dbType);
         $sql = /** @lang text */
             "UPDATE\n\t{$instance->getTable()}\nSET\n\t{$instance->getField('deleted_at')} = NOW()\n";
         $sql .= "WHERE\n\tid = {$instance->getBindName($id)}\n\t";
-        $sql .= "OR\n\tuuid = {$instance->getBindName($id)}\n";
         
         return self::getResult($instance, $sql);
     }
@@ -327,13 +334,11 @@ abstract class AbstractBuilder extends stdClass
      * @param string $table
      * @return object
      */
-    public static function hard_delete (string|int $id, string $table): object
+    public static function hard_delete (string|int $id, string $table, string $dbType): object
     {
-        $instance = new static(['id' => $id], $table);
-        $sql = /** @lang text */
-            "DELETE FROM\n\t{$instance->getTable()}\n";
+        $instance = new static(['id' => $id], $table, dbType: $dbType);
+        $sql = /** @lang text */ "DELETE FROM\n\t{$instance->getTable()}\n";
         $sql .= "WHERE\n\tid = {$instance->getBindName($id)}\n\t";
-        $sql .= "OR\n\tuuid = {$instance->getBindName($id)}\n";
         
         return self::getResult($instance, $sql);
     }
@@ -343,13 +348,11 @@ abstract class AbstractBuilder extends stdClass
      * @param string $table
      * @return object
      */
-    public static function restore (string|int $id, string $table): object
+    public static function restore (string|int $id, string $table, string $dbType): object
     {
-        $instance = new static(['id' => $id], $table);
-        $sql = /** @lang text */
-            "UPDATE\n\t{$instance->getTable()}\nSET\n\t{$instance->getField('deleted_at')} = NULL\n";
+        $instance = new static(['id' => $id], $table, dbType: $dbType);
+        $sql = /** @lang text */ "UPDATE\n\t{$instance->getTable()}\nSET\n\tdeleted_at = NULL\n";
         $sql .= "WHERE\n\tid = {$instance->getBindName($id)}\n\t";
-        $sql .= "OR\n\tuuid = {$instance->getBindName($id)}\n";
         
         return self::getResult($instance, $sql);
     }
@@ -359,15 +362,15 @@ abstract class AbstractBuilder extends stdClass
      * @param string $table
      * @return object
      */
-    public static function insert (array &$data, string $table): object
+    public static function insert (array &$data, string $table, string $dbType): object
     {
-        $instance = new static($data, $table);
-        $fields = array_keys($instance->getFieldsByCRUD());
+        $instance = new static($data, $table, dbType: $dbType);
+        $fields = $instance->getFieldsByCRUD();
         $keys = [];
         $values = [];
         
-        if (!isset($data['uuid'])) {
-            $data['uuid'] = Uuid::uuid6()->toString();
+        if (!isset($data['id'])) {
+            $data['id'] = Uuid::uuid6()->toString();
         }
         
         if (!isset($data['created_at'])) {
@@ -376,7 +379,7 @@ abstract class AbstractBuilder extends stdClass
         
         foreach ($fields as $field) {
             if (isset($data[$field])) {
-                $keys[] = $instance->getField($field);
+                $keys[] = $field;
                 $values[] = $instance->getBindName($data[$field]);
             }
         }
@@ -395,13 +398,13 @@ abstract class AbstractBuilder extends stdClass
      * @return object
      * @throws BuilderException
      */
-    public static function update (array $data, string $table): object
+    public static function update (array $data, string $table, string $dbType): object
     {
-        $instance = new static($data, $table);
-        $fields = array_keys($instance->getFieldsByCRUD());
+        $instance = new static($data, $table, dbType: $dbType);
+        $fields = $instance->getFieldsByCRUD();
         $sets = [];
-        $id = $data['uuid'] ?? ($data['id'] ?? throw new BuilderException(trans('builder.Field uuid or id is required')));
-        unset($data['uuid'], $data['id'], $data['created_at']);
+        $id = $data['id'] ?? ($data['id'] ?? throw new BuilderException(trans('builder.Field id or id is required')));
+        unset($data['id'], $data['id'], $data['created_at']);
         
         if (!isset($data['updated_at'])) {
             $data['updated_at'] = (new DateTime())->format('Y-m-d H:i:s');
@@ -409,7 +412,7 @@ abstract class AbstractBuilder extends stdClass
         
         foreach ($fields as $field) {
             if (isset($data[$field])) {
-                $sets[] = "{$instance->getField($field)} = {$instance->getBindName($data[$field])}";
+                $sets[] = "{$field} = {$instance->getBindName($data[$field])}";
             }
         }
         
@@ -417,7 +420,7 @@ abstract class AbstractBuilder extends stdClass
         $sql = /** @lang text */
             "UPDATE\n\t{$instance->getTable()}\nSET\n\t";
         $sql .= implode(",\n\t", $sets) . "\n";
-        $sql .= "WHERE\n\tid = {$bindId}\n\tOR uuid = {$bindId}\n";
+        $sql .= "WHERE\n\tid = {$bindId}\n";
         
         return self::getResult($instance, $sql);
     }
@@ -428,9 +431,11 @@ abstract class AbstractBuilder extends stdClass
     final protected function trashed (): void
     {
         $trashed = (string) Request::getInstance()->trashed;
+        $field = $this->getField('deleted_at');
+        
         $conditions = match ($trashed) {
-            default => "AND {$this->getField('deleted_at')} IS NULL",
-            'trashed' => "AND {$this->getField('deleted_at')} IS NOT NULL",
+            default => "AND {$field} IS NULL",
+            'trashed' => "AND {$field} IS NOT NULL",
             'all' => '',
         };
         
@@ -468,13 +473,13 @@ abstract class AbstractBuilder extends stdClass
      * @param string|array $uuids
      * @return void
      */
-    final protected function uuid (string|array $uuids): void
+    final protected function int_id (string|array $uuids): void
     {
         if (is_array($uuids)) {
             $binds = $this->getBindName($uuids);
-            $conditions = "AND uuid IN\n\t(" . implode(",\n\t\t", $binds) . "\n\t)";
+            $conditions = "AND int_id IN\n\t(" . implode(",\n\t\t", $binds) . "\n\t)";
         } else {
-            $conditions = "AND uuid = {$this->getBindName($uuids)}";
+            $conditions = "AND int_id = {$this->getBindName($uuids)}";
         }
         
         $this->setConditions($conditions);
@@ -577,7 +582,19 @@ abstract class AbstractBuilder extends stdClass
     
     final protected function sort (array $sorts): void
     {
-        $fields = $this->getFieldsForSearch();
+        $fields = [];
+        $patterns = [
+            '~^([\w.]+) as (\w+)$~ui' => '$1, $2',
+            '~^([\w.]+)$~ui' => '$1',
+        ];
+        
+        foreach ($this->getSelectFields() as $field) {
+            foreach ($patterns as $pattern => $replace) {
+                if (preg_match($pattern, $field)) {
+                    $fields[] = preg_replace($pattern, $replace, $field);
+                }
+            }
+        }
         
         foreach ($sorts as $field => $direction) {
             $method = 'sort_' . mb_strtolower($field);

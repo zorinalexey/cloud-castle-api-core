@@ -2,6 +2,7 @@
 
 namespace CloudCastle\Core\Api\Common\Services;
 
+use CloudCastle\Core\Api\Common\Auth\Auth;
 use CloudCastle\Core\Api\Common\Config\Config;
 use CloudCastle\Core\Api\Common\DB\AbstractBuilder;
 use CloudCastle\Core\Api\Common\DB\PdoConnect;
@@ -10,6 +11,7 @@ use Exception;
 use Ramsey\Uuid\Uuid;
 use ReflectionException;
 use stdClass;
+use Throwable;
 
 /**
  * @property PdoConnect $db
@@ -79,19 +81,19 @@ abstract class AbstractService extends stdClass
         $pdo = $this->db->getPdo();
         
         try{
-            $pdo->beginTransaction();
-            $builder = $this->filter::insert($data, $this->getTable());
+            $dbType = $this->config->database->{$this->dbName}['db_type'];
+            $builder = $this->filter::insert($data, $this->getTable(), $dbType);
+            $stmt = $pdo->prepare($builder->sql);
+            $stmt->execute($builder->binds);
             
-            if ($pdo->query($builder->sql, $builder->binds)->rowCount() > 0) {
+            if ($stmt->rowCount() > 0) {
                 $this->clearCache(["{$this->getTable()}:collection:*", "{$this->getTable()}:filters:*"]);
-                $entity = $this->view($data['uuid']);
+                $entity = $this->view($data['id']);
                 $this->writeHistory([], (array) $entity, 'create');
-                $pdo->commit();
                 
                 return $entity;
             }
         }catch(Exception $e){
-            $pdo->rollBack();
             Log::write($e, $this->getTable().'.log');
             $code = $e->getCode();
             $this->error[$code]['trace'] = $e->getTrace();
@@ -126,32 +128,28 @@ abstract class AbstractService extends stdClass
     }
     
     /**
-     * @param string $uuid
+     * @param string $id
      * @param string $trashed
      * @return object|null
      * @throws ServiceException
      */
-    public function view (string $uuid, string|null $trashed = null): object|null
+    public function view (string $id, string|null $trashed = null): object|null
     {
-        $pdo = $this->db->getPdo();
-        
         try {
-            $key = $this->getTable() . ':uuid:' . $uuid;
+            $key = $this->getTable() . ':id:' . $id;
             
             if($entity = $this->getCache($key)) {
                 return ((object)$entity??null);
             }
             
             $filters = [
-                'id' => $uuid,
-                'int_id' => $uuid,
+                'id' => $id,
             ];
             
             if($trashed) {
                 $filters['trashed'] = $trashed;
             }
             
-            $pdo->beginTransaction();
             $dbType = $this->config->database->{$this->dbName}['db_type'];
             $builder = $this->filter::select($filters, $this->getTable(), $this->getTableAlias(), $dbType);
             
@@ -159,19 +157,17 @@ abstract class AbstractService extends stdClass
                 $this->setCache($key);
                 $before = $after = (array) $entity;
                 $this->writeHistory($before, $after, 'view');
-                $pdo->commit();
                 
                 return $entity;
             }
         } catch (Exception $e) {
-            $pdo->rollBack();
             Log::write($e, $this->getTable().'.log');
             $code = $e->getCode();
             $this->error[$code]['trace'] = $e->getTrace();
             $this->error[$code]['message'] = $e->getMessage();
         }
         
-        return null;
+        page_not_found();
     }
     
     /**
@@ -209,25 +205,53 @@ abstract class AbstractService extends stdClass
      * @return void
      * @throws ServiceException
      */
-    private function writeHistory (array $before, array $after, string $action): void
+    private function writeHistory (array|object $before, array|object $after, string $action): void
     {
         $table = $this->getTable();
         $historyConfig = $this->config->history;
+        $configAction = $historyConfig->actions[$action][$table]??null;
+        $user = Auth::user();
         
-        if ($historyConfig->status && isset($historyConfig->actions->{$action}->{$table}) && $historyConfig->actions->{$action}->{$table}) {
-            $sql = /** @lang text */
-                "INSERT INTO\n\thistories\n\t(uuid, table, service, action, before, after)\n";
-            $sql .= "VALUES\n\t(:uuid, :table, :service, :action, :before, :after)\n";
+        $entityId = null;
+        $after = (array) $after;
+        $before = (array) $before;
+        
+        if(isset($before['id'])) {
+            $entityId = $before['id'];
+        }
+        
+        if(!$entityId && isset($after['id'])) {
+            $entityId = $before['id'];
+        }
+        
+        if ($historyConfig->status && $configAction) {
             $binds = [
-                ':uuid' => Uuid::uuid6()->toString(),
-                ':table' => $table,
+                ':id' => Uuid::uuid6()->toString(),
+                ':table_name' => $table,
+                ':entity_id' => $entityId,
                 ':service' => $this::class,
                 ':action' => $action,
                 ':before' => json_encode($before),
                 ':after' => json_encode($after),
             ];
             
-            $this->db->query($sql, $binds);
+            if($user && $user->id){
+                $binds[':user_id'] = $user->id;
+            }
+            
+            $keys = array_keys($binds);
+            $sql = /** @lang text */
+                "INSERT INTO\n\thistories\n\t(".str_replace(':', '', implode(",\n\t", $keys)).")\n";
+            $sql .= "VALUES\n\t(".implode(",\n\t", $keys).")\n";
+            
+            try{
+                $this->db->query($sql, $binds);
+            }catch(Throwable $e){
+                Log::write($e, $this->getTable().'.log');
+                $code = $e->getCode();
+                $this->error[$code]['trace'] = $e->getTrace();
+                $this->error[$code]['message'] = $e->getMessage();
+            }
         }
     }
     
@@ -236,9 +260,8 @@ abstract class AbstractService extends stdClass
      * @return array
      * @throws ServiceException
      */
-    public function list (array $data): array
+    public function list (array $data): array|null
     {
-        $pdo = $this->db->getPdo();
         $list = [];
         
         try{
@@ -248,17 +271,17 @@ abstract class AbstractService extends stdClass
                 return $list;
             }
             
-            $pdo->beginTransaction();
             $dbType = ($this->config->database->{$this->dbName})['db_type'];
             $builder = $this->filter::select($data, $this->getTable(), $this->getTableAlias(), $dbType);
-            [$collection, $paginate] = $this->db->paginate($builder->sql, $builder->binds, $data);
-            $list = ['collection' => $collection, 'paginate' => $paginate];
-            $this->setCache($key);
-            $before = $after = $collection;
-            $this->writeHistory($before, $after, 'list');
-            $pdo->commit();
+            
+            if($result = $this->db->paginate($builder->sql, $builder->binds, $data)){
+                [$collection, $paginate] = $result;
+                $list = ['collection' => $collection, 'paginate' => $paginate];
+                $this->setCache($key);
+                $before = $after = $collection;
+                $this->writeHistory($before, $after, 'list');
+            }
         }catch(Exception $e){
-            $pdo->rollBack();
             Log::write($e, $this->getTable().'.log');
             $code = $e->getCode();
             $this->error[$code]['trace'] = $e->getTrace();
@@ -269,183 +292,168 @@ abstract class AbstractService extends stdClass
     }
     
     /**
-     * @param array $uuids
+     * @param array $ids
      * @return array
      * @throws ServiceException
      */
-    public function restore_group (array $uuids): array
+    public function restore_group (array $ids): array
     {
         $data = [];
         
-        foreach ($uuids as $uuid) {
-            $data[$uuid] = $this->restore($uuid, 'restore_group');
+        foreach ($ids as $id) {
+            $data[$id] = $this->restore($id, 'restore_group');
         }
         
         return $data;
     }
     
     /**
-     * @param string $uuid
+     * @param string $id
      * @param string $action
      * @return object|null
      * @throws ServiceException
      */
-    public function restore (string $uuid, string $action = 'restore'): object|null
+    public function restore (string $id, string $action = 'restore'): object|null
     {
-        $pdo = $this->db->getPdo();
-        
         try{
-            $pdo->beginTransaction();
-            [$before, $builder, $data] = $this->getCrudOptions($uuid, 'restore');
+            [$before, $builder, $data] = $this->getCrudOptions($id, 'restore');
             
-            if ($pdo->query($builder->sql, $builder->binds)->rowCount() > 0) {
-                $this->clearCache([$this->getTable() . ':uuid:' . $uuid, $this->getTable() . ':collection:*', $this->getTable() . ':filters:*',]);
-                $entity = $this->view($data['uuid'], 'all');
+            if ($this->db->query($builder->sql, $builder->binds)->rowCount() > 0) {
+                $this->clearCache([$this->getTable() . ':id:' . $id, $this->getTable() . ':collection:*', $this->getTable() . ':filters:*',]);
+                $entity = $this->view($data['id'], 'all');
                 $after = (array) $entity;
                 $this->writeHistory($before, $after, $action);
-                $pdo->commit();
                 
                 return $entity;
             }
         }catch(Exception $e){
-            $pdo->rollBack();
             Log::write($e, $this->getTable().'.log');
             $code = $e->getCode();
             $this->error[$code]['trace'] = $e->getTrace();
             $this->error[$code]['message'] = $e->getMessage();
         }
         
-        return null;
+        page_not_found();
     }
     
     /**
-     * @param string $uuid
+     * @param string $id
      * @param string $action
      * @return array
      * @throws ServiceException
      */
-    private function getCrudOptions (string $uuid, string $action): array
+    private function getCrudOptions (string $id, string $action): array
     {
-        $data = ['uuid' => $uuid, 'trashed' => 'all'];
+        $data = ['id' => $id, 'trashed' => 'all'];
         $dbType = $this->config->database->{$this->dbName}['db_type'];
         $builder = $this->filter::select($data, $this->getTable(), $this->getTableAlias(), $dbType);
         $before = $this->db->first($builder->sql, $builder->binds);
+        
         unset($builder);
-        $builder = $this->filter::$action($uuid, $this->getTable());
+        $builder = $this->filter::$action($id, $this->getTable(), dbType: $dbType);
         
         return [$before, $builder, $data];
     }
     
     /**
-     * @param array $uuids
+     * @param array $ids
      * @return array
      * @throws ServiceException
      */
-    public function soft_delete_group (array $uuids): array
+    public function soft_delete_group (array $ids): array
     {
         $data = [];
         
-        foreach ($uuids as $uuid) {
-            $data[$uuid] = $this->soft_delete($uuid, 'soft_delete_group');
+        foreach ($ids as $id) {
+            try{
+                $data[$id] = $this->soft_delete($id, 'soft_delete_group');
+            }catch(Throwable $e){
+                Log::write($e, $this->getTable().'.log');
+                $code = $e->getCode();
+                $this->error[$code]['trace'] = $e->getTrace();
+                $this->error[$code]['message'] = $e->getMessage();
+                $data[$id] = false;
+            }
         }
         
         return $data;
     }
     
     /**
-     * @param string $uuid
+     * @param string $id
      * @param string $action
      * @return bool
      * @throws ServiceException
      */
-    public function soft_delete (string $uuid, string $action = 'soft_delete'): bool
+    public function soft_delete (string $id, string $action = 'soft_delete'): bool
     {
-        $pdo = $this->db->getPdo();
-        
-        try{
-            $pdo->beginTransaction();
-            [$before, $builder] = $this->getCrudOptions($uuid, 'soft_delete');
+        [$before, $builder] = $this->getCrudOptions($id, 'soft_delete');
             
-            return $this->delete($before, $builder, $action, $uuid);
-        }catch(Exception $e){
-            $pdo->rollBack();
-            Log::write($e, $this->getTable().'.log');
-            $code = $e->getCode();
-            $this->error[$code]['trace'] = $e->getTrace();
-            $this->error[$code]['message'] = $e->getMessage();
-        }
-        
-        return false;
+        return (bool)$this->delete($before, $builder, $action, $id);
     }
     
     /**
-     * @param array $uuids
+     * @param array $ids
      * @return array
      * @throws ServiceException
      */
-    public function hard_delete_group (array $uuids): array
+    public function hard_delete_group (array $ids): array
     {
         $data = [];
         
-        foreach ($uuids as $uuid) {
-            $data[$uuid] = $this->hard_delete($uuid, 'hard_delete_group');
+        foreach ($ids as $id) {
+            try{
+                $data[$id] = $this->hard_delete($id, 'hard_delete_group');
+            }catch(Throwable $e){
+                Log::write($e, $this->getTable().'.log');
+                $code = $e->getCode();
+                $this->error[$code]['trace'] = $e->getTrace();
+                $this->error[$code]['message'] = $e->getMessage();
+                $data[$id] = false;
+            }
         }
         
         return $data;
     }
     
     /**
-     * @param string $uuid
+     * @param string $id
      * @param string $action
      * @return bool
      * @throws ServiceException
      */
-    public function hard_delete (string $uuid, string $action = 'hard_delete'): bool
+    public function hard_delete (string $id, string $action = 'hard_delete'): bool
     {
-        $pdo = $this->db->getPdo();
-        
-        try{
-            [$before, $builder] = $this->getCrudOptions($uuid, 'hard_delete');
+        [$before, $builder] = $this->getCrudOptions($id, 'hard_delete');
             
-            return $this->delete($before, $builder, $action, $uuid);
-        }catch(Exception $e){
-            $pdo->rollBack();
-            Log::write($e, $this->getTable().'.log');
-            $code = $e->getCode();
-            $this->error[$code]['trace'] = $e->getTrace();
-            $this->error[$code]['message'] = $e->getMessage();
-        }
-        
-        return false;
+        return (bool)$this->delete($before, $builder, $action, $id);
     }
     
     /**
-     * @param string $uuid
+     * @param string $id
      * @param array $data
      * @return object|null
      * @throws ServiceException
      */
-    public function update (string $uuid, array $data = []): object|null
+    public function update (string $id, array $data = []): object|null
     {
         $pdo = $this->db->getPdo();
         
         try{
-            $pdo->beginTransaction();
-            $data['uuid'] = $uuid;
-            $before = (array) $this->view($data['uuid']);
-            $builder = $this->filter::update($data, $this->getTable());
+            $data['id'] = $id;
+            $before = (array) $this->view($data['id']);
+            $dbType = $this->config->database->{$this->dbName}['db_type'];
+            $builder = $this->filter::update($data, $this->getTable(), $dbType);
             
-            if ($pdo->query($builder->sql, $builder->binds)->rowCount() > 0) {
-                $this->clearCache([$this->getTable() . ':uuid:' . $uuid, $this->getTable() . ':collection:*', $this->getTable() . ':filters:*',]);
-                $entity = $this->view($data['uuid']);
+            if ($this->db->query($builder->sql, $builder->binds)->rowCount() > 0) {
+                $this->clearCache([$this->getTable() . ':id:' . $id, $this->getTable() . ':collection:*', $this->getTable() . ':filters:*',]);
+                $entity = $this->view($data['id']);
                 $after = (array) $entity;
                 $this->writeHistory($before, $after, 'update');
-                $pdo->commit();
                 
                 return $entity;
             }
         }catch(Exception $e){
-            $pdo->rollBack();
             Log::write($e, $this->getTable().'.log');
             $code = $e->getCode();
             $this->error[$code]['trace'] = $e->getTrace();
@@ -465,26 +473,25 @@ abstract class AbstractService extends stdClass
      * @param mixed $before
      * @param mixed $builder
      * @param string $action
-     * @param mixed $uuid
+     * @param mixed $id
      * @return bool
      * @throws ServiceException
      */
-    private function delete (mixed $before, mixed $builder, string $action, mixed $uuid): bool
+    private function delete (mixed $before, mixed $builder, string $action, mixed $id): bool
     {
         $db = $this->db;
-        
+            
         if ($db->query($builder->sql, $builder->binds)->rowCount() > 0) {
-            $this->writeHistory($before, $this->view($uuid, 'all'), $action);
+            $this->writeHistory($before, $this->view($id, 'all'), $action);
             $this->clearCache([
-                $this->getTable() . ':uuid:' . $uuid,
+                $this->getTable() . ':id:' . $id,
                 $this->getTable() . ':collection:*',
                 $this->getTable() . ':filters:*',
             ]);
-            $db->getPdo()->commit();
-            
+                
             return true;
         }
         
-        return false;
+        page_not_found();
     }
 }

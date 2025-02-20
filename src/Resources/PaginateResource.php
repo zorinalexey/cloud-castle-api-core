@@ -36,6 +36,10 @@ final class PaginateResource extends AbstractResource
             $from = 0;
         }
         
+        if($limit === 0){
+            $limit = $total;
+        }
+        
         return [
             'current_page' => $page,
             'per_page' => $limit,

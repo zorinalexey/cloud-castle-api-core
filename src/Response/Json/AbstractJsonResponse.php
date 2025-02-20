@@ -8,11 +8,15 @@ use JsonException;
 
 abstract class AbstractJsonResponse extends AbstractResponse implements ResponseInterface
 {
+    private static string $contentType = 'application/json';
+
     /**
      * @throws JsonException
      */
     public function __toString (): string
     {
+        header(sprintf('Content-type: %s', self::$contentType));
+        
         if(!$this->errors){
             $this->errors = (object)[];
         }

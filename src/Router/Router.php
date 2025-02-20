@@ -52,7 +52,7 @@ final class Router implements SingletonInterface
      */
     public static function addRoute (AbstractRoute $route): AbstractRoute
     {
-        $id = spl_object_id($route);
+        $id = $route->permissionKey;
         self::$instance->routeList[$id] = $route;
         
         return self::$instance->routeList[$id];
@@ -95,6 +95,11 @@ final class Router implements SingletonInterface
     public static function getCurrentRoute (): AbstractRoute
     {
         return self::$currentRoute;
+    }
+    
+    public static function getRoute (string $permissionKey): AbstractRoute|null
+    {
+        return self::$instance->routeList[$permissionKey]?? null;
     }
     
     /**

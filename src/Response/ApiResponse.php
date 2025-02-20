@@ -4,7 +4,7 @@ namespace CloudCastle\Core\Api\Response;
 
 final class ApiResponse
 {
-    private readonly ResponseInterface $response;
+    private $response;
     
     public function __construct(bool $success, array $data, array $errors = [], string|null $message = null, int $code = 200, array $options = [])
     {
@@ -21,7 +21,7 @@ final class ApiResponse
             default => 'FailResponse',
         };
         
-        $this->response = new ($namespace.$type)($data, $errors, $message, $code, $options);
+        $this->response = $message;
     }
     
     public function __toString(): string

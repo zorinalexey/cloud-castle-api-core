@@ -1,5 +1,5 @@
 <?php
 
 return [
-    'Field uuid or id is required' => 'Поле uuid или id обязательно и не может быть пустым'
+    'Field id or id is required' => 'Поле id или id обязательно и не может быть пустым'
 ];

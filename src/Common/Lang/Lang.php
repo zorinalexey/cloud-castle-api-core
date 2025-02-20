@@ -80,8 +80,8 @@ final class Lang extends stdClass
         $result = $key;
         
         foreach ($indexes as $index) {
-            if (isset($this->{$index}) && is_object($this->{$index})) {
-                $check = $this->{$index};
+            if(isset($this->{$index}) && (is_array($this->{$index}) || is_object($this->{$index}))) {
+                $check = (object) $this->{$index};
             }
             
             if ($check && is_object($check) && property_exists($check, $index)) {
