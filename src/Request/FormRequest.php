@@ -13,14 +13,14 @@ abstract class FormRequest extends stdClass
      * @var array|string[]
      */
     protected array $common_rules = [
-        'trashed' => 'default:not_trashed|string|nullable|enum:trashed,not_trashed,all',
+        'trashed' => 'default:not_trashed|string|enum:trashed,not_trashed,all',
         'id' => 'string|nullable',
         'int_id' => 'int|nullable',
         'created_at' => 'date|nullable',
         'updated_at' => 'date|nullable',
         'deleted_at' => 'date|nullable',
-        'page' => 'nullable|default:1|int|min:1',
-        'per_page' => 'nullable|default:50|int|min:0|max:100',
+        'page' => 'default:1|int|min:1',
+        'per_page' => 'default:50|int|min:0|max:500',
         'search' => 'string|nullable',
     ];
     
@@ -787,7 +787,7 @@ abstract class FormRequest extends stdClass
      */
     private function enum (string $key, ...$values): void
     {
-        if (!in_array($key, $values)) {
+        if (!in_array($this->{$key}, $values, true)) {
             $this->setErrorMessage($key, "Field value :param must have one of the values :values",
                 [
                     ':param' => $key,

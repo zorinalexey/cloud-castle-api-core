@@ -6,6 +6,7 @@ use CloudCastle\Core\Api\Common\Auth\Auth;
 use CloudCastle\Core\Api\Common\Config\Config;
 use CloudCastle\Core\Api\Common\DB\AbstractBuilder;
 use CloudCastle\Core\Api\Common\DB\PdoConnect;
+use CloudCastle\Core\Api\Common\DB\Collection;
 use CloudCastle\Core\Api\Common\Log\Log;
 use Exception;
 use Ramsey\Uuid\Uuid;
@@ -260,9 +261,9 @@ abstract class AbstractService extends stdClass
      * @return array
      * @throws ServiceException
      */
-    public function list (array $data): array|null
+    public function list (array $data): Collection
     {
-        $list = [];
+        $list = Collection::make([]);
         
         try{
             $key = $this->getTable().':collection:' . md5(json_encode($data));
@@ -275,11 +276,9 @@ abstract class AbstractService extends stdClass
             $builder = $this->filter::select($data, $this->getTable(), $this->getTableAlias(), $dbType);
             
             if($result = $this->db->paginate($builder->sql, $builder->binds, $data)){
-                [$collection, $paginate] = $result;
-                $list = ['collection' => $collection, 'paginate' => $paginate];
+                $list = Collection::make($result);
                 $this->setCache($key);
-                $before = $after = $collection;
-                $this->writeHistory($before, $after, 'list');
+                $before = $after = $list->collection;
             }
         }catch(Exception $e){
             Log::write($e, $this->getTable().'.log');

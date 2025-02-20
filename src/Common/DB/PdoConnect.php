@@ -55,7 +55,7 @@ final class PdoConnect
             'per_page' => $limit,
         ];
         
-        return [$this->get($sql, $binds), PaginateResource::make($paginated)];
+        return ['collection' => $this->get($sql, $binds), 'paginate' => PaginateResource::make($paginated)];
     }
     
     /**

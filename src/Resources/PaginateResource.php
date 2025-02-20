@@ -46,6 +46,7 @@ final class PaginateResource extends AbstractResource
             'last_page' => $lastPage,
             'next_page' => $nextPage,
             'prev_page' => $prevPage,
+            'first_page' => 1,
             'total' => $total,
             'from' => $from,
             'to' => $to,
